@@ -1,67 +1,61 @@
-// Our Dependecies
 const express = require('express');
 const app = express();
-const mysql = require('mysql');
+const mongoose = require('mongoose');
 const cors = require('cors');
+require('dotenv').config();
 
 app.use(express.json());
 app.use(cors());
 
-// Let us run the server. So its running
-app.listen(3002, () => {
-    console.log('Server is running on port 3002');
+const url = `mongodb+srv://${process.env.MONGODB_USER}:${process.env.MONGODB_PASS}@${process.env.MONGODB_CLUSTER}.rwqi8e6.mongodb.net/${process.env.MONGODB_DATABASE}?retryWrites=true&w=majority`;
+const port = process.env.PORT || 3000;
+
+mongoose.connect(url, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => {
+        console.log('Connected to MongoDB');
+        app.listen(port, () => {
+            console.log(`Server is running on port ${port}`);
+        });
+    })
+    .catch(err => console.error('Failed to connect to MongoDB', err));
+
+const userSchema = new mongoose.Schema({
+    email: { type: String, required: true },
+    username: { type: String, required: true },
+    password: { type: String, required: true }
 });
 
-// Let us create our database (mysql)
-const db = mysql.createConnection({
-    user: 'root',
-    host: 'localhost',
-    password: '', //If you have set xampp password please enter it here
-    database: 'plantdb',
-})
+const User = mongoose.model('User', userSchema);
 
-// let us now create a route to the server that will register a user
+app.post('/register', async (req, res) => {
+    const { Email, UserName, Password } = req.body;
 
-app.post('/register', (req, res) => {
-    const sentEmail = req.body.Email
-    const sentUserName = req.body.UserName
-    const sentPassword = req.body.Password
+    const user = new User({
+        email: Email,
+        username: UserName,
+        password: Password
+    });
 
-    // Lets create SQL statement to insert the user to the Database table Users
-    const SQL = 'INSERT INTO users (email, username, password) VALUES (?,?,?)'
-    const Values = [sentEmail, sentUserName, sentPassword]
+    try {
+        await user.save();
+        console.log('User inserted successfully!');
+        res.send({ message: 'User added!' });
+    } catch (err) {
+        res.send(err);
+    }
+});
 
-    // Query to execute the sql statement stated above
-    db.query(SQL, Values, (err, results) => {
-        if (err) {
-            res.send(err)
+app.post('/login', async (req, res) => {
+    const { LoginUserName, LoginPassword } = req.body;
+
+    try {
+        const user = await User.findOne({ username: LoginUserName, password: LoginPassword });
+        if (user) {
+            res.send(user);
+        } else {
+            res.send({ message: `Credentials don't match!` });
         }
-        else {
-            console.log('User inserted successfully!');
-            res.send({ message: 'User added!' })
-        }
-    })
-})
-
-
-app.post('/login', (req, res) => {
-    const sentloginUserName = req.body.LoginUserName
-    const sentLoginPassword = req.body.LoginPassword
-
-    // Lets create SQL statement to insert the user to the Database table Users
-    const SQL = 'SELECT * FROM users WHERE username = ? && password = ?'
-    const Values = [sentloginUserName, sentLoginPassword]
-
-        // Query to execute the sql statement stated above
-        db.query(SQL, Values, (err, results) => {
-            if(err) {
-                res.send({error: err})
-            }
-            if(results.length > 0) {
-                res.send(results)
-            }
-            else{
-                res.send({message: `Credentials Don't match!`})
-            }
-        })
-})
+    } catch (err) {
+        res.send({ error: err });
+    }
+});
