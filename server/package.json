@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
+    "start": "node index.js && npm start-client",
+    "start-client":"cd ../client && npm install && npm run build && npm start",
     "build": "echo 'No build needed for server'"
   },
   "author": "",
