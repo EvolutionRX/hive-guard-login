@@ -3,38 +3,64 @@ const app = express();
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
-
+const { Decimal128 } = require('bson');
 app.use(express.json());
 app.use(cors());
 
-const url = `mongodb+srv://${process.env.MONGODB_USER}:${process.env.MONGODB_PASS}@${process.env.MONGODB_CLUSTER}.rwqi8e6.mongodb.net/${process.env.MONGODB_DATABASE}?retryWrites=true&w=majority`;
+const userDB = `mongodb+srv://${process.env.MONGODB_USER}:${process.env.MONGODB_PASS}@${process.env.MONGODB_CLUSTER}.rwqi8e6.mongodb.net/${process.env.MONGODB_DATABASE}?retryWrites=true&w=majority`;
+const sensorDB = process.env.MONGODB_URI;
 const port = process.env.PORT || 3000;
 
-mongoose.connect(url, { useNewUrlParser: true, useUnifiedTopology: true })
-    .then(() => {
-        console.log('Connected to MongoDB');
-        app.listen(port, () => {
-            console.log(`Server is running on port ${port}`);
-        });
-    })
-    .catch(err => console.error('Failed to connect to MongoDB', err));
+// Conectar a la base de datos principal
+mongoose.connect(userDB, {})
+    .then(() => console.log('Connected to Users MongoDB'))
+    .catch(err => console.error('Failed to connect to Users MongoDB', err));
 
+// Crear una conexión separada para la base de datos secundaria
+const sensorDBConnection = mongoose.createConnection(sensorDB, {
+    maxPoolSize: process.env.MONGODB_MAX_POOL,
+    serverSelectionTimeoutMS: 10000
+});
+
+sensorDBConnection.once('open', () => {
+    console.log('Connected to Sensor MongoDB');
+});
+
+sensorDBConnection.on('error', (err) => {
+    console.error('Failed to connect to Sensor MongoDB', err);
+});
+
+// Esquema y modelo para la base de datos principal
 const userSchema = new mongoose.Schema({
     email: { type: String, required: true },
     username: { type: String, required: true },
     password: { type: String, required: true }
 });
-
 const User = mongoose.model('User', userSchema);
 
+// Esquemas y modelos para la base de datos secundaria
+const sensorSchema = new mongoose.Schema({
+    sensorId: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now },
+    temp: Number,
+    hum: Number
+});
+const Sensor = sensorDBConnection.model('Sensor', sensorSchema);
+
+const sensorDetectionSchema = new mongoose.Schema({
+    sensorId: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now },
+    varroa_score: { type: Decimal128 },
+    pollen_score: { type: Decimal128 },
+    wasps_score: { type: Decimal128 },
+    cooling_score: { type: Decimal128 }
+});
+const SensorDetection = sensorDBConnection.model('SensorDetection', sensorDetectionSchema);
+
+// Endpoints para la base de datos principal
 app.post('/register', async (req, res) => {
     const { Email, UserName, Password } = req.body;
-
-    const user = new User({
-        email: Email,
-        username: UserName,
-        password: Password
-    });
+    const user = new User({ email: Email, username: UserName, password: Password });
 
     try {
         await user.save();
@@ -58,4 +84,50 @@ app.post('/login', async (req, res) => {
     } catch (err) {
         res.send({ error: err });
     }
+});
+
+app.get('/api/users', async (req, res) => {
+    try {
+        const users = await User.find();
+        res.json(users);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// Endpoints para la base de datos secundaria
+app.get('/api/sensors', async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+
+        if (isNaN(start) || isNaN(end)) {
+            return res.status(400).json({ message: "Invalid Date" });
+        }
+
+        const sensors = await Sensor.find({
+            timestamp: {
+                $gte: start,
+                $lte: end
+            }
+        });
+        res.json(sensors);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+app.get('/api/sensordetections', async (req, res) => {
+    try {
+        const detections = await SensorDetection.find();
+        res.json(detections);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// Iniciar el servidor
+app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
 });
