@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "heroku-postbuild": "cd ../client && npm install && npm run build"
+    "build": "echo 'No build needed for server'"
   },
   "author": "",
   "license": "ISC",
