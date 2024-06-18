@@ -57,6 +57,15 @@ const sensorDetectionSchema = new mongoose.Schema({
 });
 const SensorDetection = sensorDBConnection.model('SensorDetection', sensorDetectionSchema);
 
+const configSchema = new mongoose.Schema({
+    username: { type: String, required: true },
+    TEMP_MIN_THRESHOLD: { type: Number, required: true },
+    TEMP_MAX_THRESHOLD: { type: Number, required: true },
+    HUM_THRESHOLD: { type: Number, required: true }
+});
+
+const Config = mongoose.model('Config', configSchema);
+
 // Endpoints para la base de datos principal
 app.post('/register', async (req, res) => {
     const { Email, UserName, Password } = req.body;
@@ -87,9 +96,14 @@ app.post('/login', async (req, res) => {
 });
 
 app.get('/api/users', async (req, res) => {
+    const { username } = req.query;
     try {
-        const users = await User.find();
-        res.json(users);
+        const user = await User.findOne({ username: username });
+        if (user) {
+            res.json(user);
+        } else {
+            res.status(404).json({ message: 'User not found' });
+        }
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -124,6 +138,38 @@ app.get('/api/sensordetections', async (req, res) => {
         res.json(detections);
     } catch (error) {
         res.status(500).json({ message: error.message });
+    }
+});
+
+// Endpoint para consultar la configuración existente
+app.get('/api/config', async (req, res) => {
+    const { username } = req.query;
+    try {
+        const config = await Config.findOne({ username: username });
+        if (config) {
+            res.json(config);
+        } else {
+            res.status(404).json({ message: 'Configuration not found' });
+        }
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+});
+
+// Endpoint para crear una nueva configuración
+app.post('/api/setConfig', async (req, res) => {
+    const { username, TEMP_MIN_THRESHOLD, TEMP_MAX_THRESHOLD, HUM_THRESHOLD } = req.body;
+    try {
+        const newConfig = new Config({
+            username,
+            TEMP_MIN_THRESHOLD,
+            TEMP_MAX_THRESHOLD,
+            HUM_THRESHOLD
+        });
+        await newConfig.save();
+        res.status(200).send({ message: 'Configuration created successfully!' });
+    } catch (error) {
+        res.status(500).send({ message: 'Error creating configuration', error });
     }
 });
 
